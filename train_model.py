@@ -1,19 +1,19 @@
 """
 Bank Loan Granting - Model Training Script
 ==========================================
-Trains a Random Forest classifier and saves the model + scaler to disk.
+Trains an XGBoost classifier and saves the model + scaler to disk.
 Run this script once before launching the Streamlit app.
 """
 
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import (
-    classification_report, confusion_matrix, roc_auc_score, roc_curve, accuracy_score
+    classification_report, accuracy_score, f1_score
 )
 import joblib
 import os
@@ -55,43 +55,42 @@ X_test_sc  = scaler.transform(X_test)
 # ── 4. Train models ───────────────────────────────────────────────────────────
 
 models = {
-    "Random Forest":       RandomForestClassifier(n_estimators=200, max_depth=None,
-                                                  random_state=42, n_jobs=-1),
+    "XGBoost":             XGBClassifier(n_estimators=200, max_depth=6, learning_rate=0.1,
+                                         use_label_encoder=False, eval_metric="logloss",
+                                         random_state=42, n_jobs=-1),
     "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
     "Decision Tree":       DecisionTreeClassifier(max_depth=6, random_state=42),
 }
 
 results = {}
 for name, model in models.items():
-    if name == "Random Forest":
-        model.fit(X_train, y_train)           # RF doesn't need scaling
+    if name in ("XGBoost", "Decision Tree"):
+        model.fit(X_train, y_train)   # tree-based: scale-invariant
         y_pred = model.predict(X_test)
-        y_prob = model.predict_proba(X_test)[:, 1]
     else:
         model.fit(X_train_sc, y_train)
         y_pred = model.predict(X_test_sc)
-        y_prob = model.predict_proba(X_test_sc)[:, 1]
 
-    acc   = accuracy_score(y_test, y_pred)
-    auc   = roc_auc_score(y_test, y_prob)
-    results[name] = {"accuracy": acc, "roc_auc": auc, "model": model}
+    acc = accuracy_score(y_test, y_pred)
+    f1  = f1_score(y_test, y_pred)
+    results[name] = {"accuracy": acc, "f1": f1, "model": model}
     print(f"\n{'='*50}")
     print(f"  {name}")
-    print(f"  Accuracy : {acc:.4f}   ROC-AUC : {auc:.4f}")
+    print(f"  Accuracy : {acc:.4f}   F1-Score : {f1:.4f}")
     print(classification_report(y_test, y_pred, target_names=["Not Granted", "Granted"]))
 
-# ── 5. Cross‑validation on best model (Random Forest) ─────────────────────────
+# ── 5. Cross‑validation on best model (XGBoost) ───────────────────────────────
 
-best_model = models["Random Forest"]
+best_model = models["XGBoost"]
 cv        = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-cv_scores = cross_val_score(best_model, X, y, cv=cv, scoring="roc_auc")
-print(f"\nRandom Forest – 5-Fold CV ROC-AUC: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+cv_scores = cross_val_score(best_model, X, y, cv=cv, scoring="f1")
+print(f"\nXGBoost – 5-Fold CV F1-Score: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
 
 # ── 6. Save artefacts ─────────────────────────────────────────────────────────
 
-joblib.dump(best_model, "rf_model.pkl")
-joblib.dump(scaler,     "scaler.pkl")
+joblib.dump(best_model,   "xgb_model.pkl")
+joblib.dump(scaler,       "scaler.pkl")
 joblib.dump(FEATURE_COLS, "feature_cols.pkl")
 
-print("\n✅  Saved: rf_model.pkl | scaler.pkl | feature_cols.pkl")
+print("\n✅  Saved: xgb_model.pkl | scaler.pkl | feature_cols.pkl")
 print(f"   Feature columns: {FEATURE_COLS}")

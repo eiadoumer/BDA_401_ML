@@ -30,7 +30,7 @@ MODEL_DIR = os.path.dirname(__file__)
 
 @st.cache_resource
 def load_artifacts():
-    model        = joblib.load(os.path.join(MODEL_DIR, "rf_model.pkl"))
+    model        = joblib.load(os.path.join(MODEL_DIR, "xgb_model.pkl"))
     scaler       = joblib.load(os.path.join(MODEL_DIR, "scaler.pkl"))
     feature_cols = joblib.load(os.path.join(MODEL_DIR, "feature_cols.pkl"))
     return model, scaler, feature_cols
@@ -89,7 +89,7 @@ predict_btn = st.sidebar.button("🔍  Predict Loan Decision", use_container_wid
 # ──────────────────────────────────────────────────────────────────────────────
 st.title("🏦 Bank Personal Loan Granting System")
 st.markdown(
-    "This application uses a **Random Forest classifier** trained on 5,000 bank customers "
+    "This application uses a **XGBoost classifier** trained on 5,000 bank customers "
     "to predict whether a personal loan will be **granted** or **not granted** to an applicant."
 )
 
@@ -148,7 +148,7 @@ if predict_btn:
 # ──────────────────────────────────────────────────────────────────────────────
 # Dashboard Tabs
 # ──────────────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["📊 Data Overview", "🌳 Feature Importance", "🗺️ Decision Boundary"])
+tab1, tab2= st.tabs(["📊 Data Overview", "🌳 Feature Importance"])
 
 # ── Tab 1 – Data Overview ─────────────────────────────────────────────────────
 with tab1:
@@ -220,65 +220,8 @@ with tab2:
         "the strongest predictors of whether a personal loan is granted."
     )
 
-# ── Tab 3 – Decision Boundary (PCA 2-D projection) ───────────────────────────
-with tab3:
-    st.subheader("Decision Boundary (PCA 2-D Projection)")
-    st.markdown(
-        "Because the model uses 11 features, the decision boundary is shown "
-        "projected onto the first two **Principal Components** that capture the "
-        "most variance in the data."
-    )
 
-    X_all = df_full[FEATURE_COLS].values
-    y_all = df_full["Personal Loan"].values
-
-    pca = PCA(n_components=2, random_state=42)
-    X_pca = pca.fit_transform(scaler.transform(X_all))
-
-    # Mesh grid in PCA space
-    x_min, x_max = X_pca[:, 0].min() - 1, X_pca[:, 0].max() + 1
-    y_min, y_max = X_pca[:, 1].min() - 1, X_pca[:, 1].max() + 1
-    h = 0.15
-    xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
-    mesh_pca = np.c_[xx.ravel(), yy.ravel()]
-    mesh_orig = scaler.inverse_transform(pca.inverse_transform(mesh_pca))
-    Z = model.predict_proba(mesh_orig)[:, 1].reshape(xx.shape)
-
-    fig_db, ax_db = plt.subplots(figsize=(9, 6))
-    contour = ax_db.contourf(xx, yy, Z, levels=50, cmap="RdYlGn", alpha=0.75)
-    plt.colorbar(contour, ax=ax_db, label="P(Loan Granted)")
-    ax_db.contour(xx, yy, Z, levels=[0.5], colors="black", linewidths=1.5, linestyles="--")
-
-    colors_scatter = ["#c0392b" if yi == 0 else "#1e8449" for yi in y_all]
-    ax_db.scatter(X_pca[:, 0], X_pca[:, 1], c=colors_scatter, s=5, alpha=0.4, linewidths=0)
-
-    # Highlight the current applicant
-    if predict_btn:
-        app_pca = pca.transform(scaler.transform(input_data.values))
-        ax_db.scatter(
-            app_pca[:, 0], app_pca[:, 1],
-            marker="*", s=300, c="#f39c12", edgecolors="black", linewidths=1.2,
-            zorder=5, label="This Applicant"
-        )
-        ax_db.legend(fontsize=10)
-
-    denied_patch   = mpatches.Patch(color="#c0392b", label="Not Granted (actual)")
-    approved_patch = mpatches.Patch(color="#1e8449", label="Granted (actual)")
-    boundary_line  = plt.Line2D([0], [0], color="black", linestyle="--", label="Decision boundary (50%)")
-    ax_db.legend(handles=[denied_patch, approved_patch, boundary_line], fontsize=9)
-    ax_db.set_xlabel(f"PC1 ({pca.explained_variance_ratio_[0]*100:.1f}% variance)")
-    ax_db.set_ylabel(f"PC2 ({pca.explained_variance_ratio_[1]*100:.1f}% variance)")
-    ax_db.set_title("Random Forest Decision Boundary — PCA Projection (Granted vs Not Granted)")
-    fig_db.tight_layout()
-    st.pyplot(fig_db)
-    plt.close(fig_db)
-
-    ev = pca.explained_variance_ratio_
-    st.info(
-        f"PC1 + PC2 explain **{sum(ev)*100:.1f}%** of the total data variance.  "
-        "The dashed black line is the 50% probability decision boundary.  "
-        "Green regions indicate where the model predicts the loan will be **granted**."
-    )
+    
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Footer
@@ -286,5 +229,5 @@ with tab3:
 st.markdown("---")
 st.caption(
     "BDA401 Machine Learning Project | Bank Loan Granting Prediction | "
-    "Random Forest Classifier | © 2026"
+    "XGBoost Classifier | © 2026"
 )
